@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog"
 
 const GRID_SIZE = 4
-const CELL_SIZE = 4.5 // in rem
+const CELL_SIZE = typeof window !== "undefined" && window.innerWidth < 640 ? 3.2 : 4.5 // smaller cells on mobile
 const CELL_GAP = 0.5 // in rem
 
 type Tile = {
@@ -254,6 +254,33 @@ useEffect(() => {
         break
     }
   }
+  // --- TOUCH CONTROLS ---
+  const touchStart = useRef<{ x: number; y: number } | null>(null)
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0]
+    touchStart.current = { x: touch.clientX, y: touch.clientY }
+  }
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStart.current) return
+    const touch = e.changedTouches[0]
+    const dx = touch.clientX - touchStart.current.x
+    const dy = touch.clientY - touchStart.current.y
+    const absDx = Math.abs(dx)
+    const absDy = Math.abs(dy)
+
+    if (Math.max(absDx, absDy) > 30) { // minimum swipe distance
+      if (absDx > absDy) {
+        if (dx > 0) move("right")
+        else move("left")
+      } else {
+        if (dy > 0) move("down")
+        else move("up")
+      }
+    }
+    touchStart.current = null
+  }
 
   const cellColor = (value: number) => {
     switch (value) {
@@ -303,25 +330,32 @@ const tileVariants: Variants = {
 
   return (
     <div
-      className="flex flex-col items-center justify-center min-h-screen bg-comic-bg halftone-bg text-white"
+      className="flex flex-col items-center justify-center min-h-screen bg-comic-bg halftone-bg text-white select-none touch-none"
       ref={gameContainerRef}
       tabIndex={0}
       onKeyDown={handleKeyDown}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
       aria-label="2048 Comic Edition Game Board"
     >
+
       <div className="w-full max-w-md p-4 flex flex-col items-center">
         <div className="flex justify-between items-center mb-6 w-full">
-          <h1 className="text-7xl font-comic text-[#ffea00] comic-text-shadow transform -rotate-2">2048</h1>
-          <div className="flex gap-3">
-            <div className="bg-[#ff1744] p-3 h-20 w-20 rounded-lg text-white flex flex-col items-center justify-center border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transform rotate-2">
-              <div className="text-xs font-comic">SCORE</div>
-              <div className="font-comic text-2xl">{score}</div>
-            </div>
-            <div className="bg-[#2979ff] h-20 w-20 rounded-lg p-3 text-white flex flex-col items-center justify-center border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transform -rotate-2">
-              <div className="text-xs font-comic">BEST</div>
-              <div className="font-comic text-2xl">{bestScore}</div>
-            </div>
+         <h1 className="text-5xl sm:text-7xl font-comic text-[#ffea00] comic-text-shadow transform -rotate-1 sm:-rotate-2">
+          COMIC 2048
+        </h1>
+
+        <div className="flex gap-3">
+          <div className="bg-[#ff1744] p-3 h-20 w-20 rounded-lg text-white flex flex-col items-center justify-center border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transform rotate-2">
+            <div className="text-xs font-comic">SCORE</div>
+            <div className="font-comic text-2xl">{score}</div>
           </div>
+          <div className="bg-[#2979ff] h-20 w-20 rounded-lg p-3 text-white flex flex-col items-center justify-center border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transform -rotate-2">
+            <div className="text-xs font-comic">BEST</div>
+            <div className="font-comic text-2xl">{bestScore}</div>
+          </div>
+        </div>
+
         </div>
 
         <div className="mb-4 bg-comic-panel border-4 border-black rounded-lg p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] w-full text-center">
@@ -405,7 +439,7 @@ const tileVariants: Variants = {
         <div className="mt-6">
           <Button
             onClick={initializeGame}
-            className="bg-[#00e676] text-gray-900 hover:bg-[#00c853] border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[3px] hover:translate-y-[3px] transition-all font-comic text-xl px-8 py-6 transform rotate-1"
+            className="bg-[#00e676] text-gray-900 hover:bg-[#00c853] border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[3px] hover:translate-y-[3px] transition-all font-comic text-lg sm:text-xl px-6 sm:px-8 py-5 sm:py-6 transform sm:rotate-1"
           >
             NEW GAME
           </Button>
