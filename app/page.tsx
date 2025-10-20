@@ -50,6 +50,7 @@ export default function Game2048() {
     return () => window.removeEventListener("resize", updateCellSize)
   }, [])
 
+  // --- Play sounds ---
   const playSound = (type: "move" | "merge" | "gameover") => {
     try {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
@@ -78,6 +79,7 @@ export default function Game2048() {
     } catch {}
   }
 
+  // --- Game initialization ---
   useEffect(() => {
     initializeGame()
     const storedBestScore = localStorage.getItem("bestScore")
@@ -85,6 +87,7 @@ export default function Game2048() {
     if (gameContainerRef.current) gameContainerRef.current.focus()
   }, [])
 
+  // --- Comic phrases ---
   useEffect(() => {
     const eligiblePhrases = comicPhrases.filter(
       (p) => score >= p.score && p.score > lastPhraseScoreRef.current
@@ -97,6 +100,7 @@ export default function Game2048() {
     }
   }, [score, bestScore])
 
+  // --- Max tile tracking ---
   useEffect(() => {
     const maxValue = Math.max(...board.map((tile) => tile.value), 2)
     if (maxValue > maxTileValue) setMaxTileValue(maxValue)
@@ -228,6 +232,7 @@ export default function Game2048() {
     return true
   }
 
+  // --- Keyboard ---
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     switch (e.key) {
       case "ArrowUp":
@@ -245,25 +250,43 @@ export default function Game2048() {
     }
   }
 
-  // --- Touch controls ---
-  const touchStart = useRef<{ x: number; y: number } | null>(null)
-  const handleTouchStart = (e: React.TouchEvent) => {
-    const touch = e.touches[0]
-    touchStart.current = { x: touch.clientX, y: touch.clientY }
-  }
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (!touchStart.current) return
-    const touch = e.changedTouches[0]
-    const dx = touch.clientX - touchStart.current.x
-    const dy = touch.clientY - touchStart.current.y
-    const absDx = Math.abs(dx)
-    const absDy = Math.abs(dy)
-    if (Math.max(absDx, absDy) > 30) {
-      if (absDx > absDy) dx > 0 ? move("right") : move("left")
-      else dy > 0 ? move("down") : move("up")
+  // --- Touch controls with scroll fix ---
+  useEffect(() => {
+    const boardElement = document.getElementById("game-board")
+    if (!boardElement) return
+
+    let startX = 0
+    let startY = 0
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (!boardElement.contains(e.target as Node)) return
+      const touch = e.touches[0]
+      startX = touch.clientX
+      startY = touch.clientY
     }
-    touchStart.current = null
-  }
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (!boardElement.contains(e.target as Node)) return
+      const touch = e.changedTouches[0]
+      const dx = touch.clientX - startX
+      const dy = touch.clientY - startY
+      const absDx = Math.abs(dx)
+      const absDy = Math.abs(dy)
+
+      if (Math.max(absDx, absDy) > 30) {
+        if (absDx > absDy) dx > 0 ? move("right") : move("left")
+        else dy > 0 ? move("down") : move("up")
+      }
+    }
+
+    window.addEventListener("touchstart", handleTouchStart, { passive: true })
+    window.addEventListener("touchend", handleTouchEnd, { passive: true })
+
+    return () => {
+      window.removeEventListener("touchstart", handleTouchStart)
+      window.removeEventListener("touchend", handleTouchEnd)
+    }
+  }, [move])
 
   const cellColor = (value: number) => {
     switch (value) {
@@ -299,7 +322,7 @@ export default function Game2048() {
     enter: {
       scale: 1,
       rotate: 0,
-      transition: { type: "spring" as const, stiffness: 300, damping: 20 },
+      transition: { type: "spring", stiffness: 300, damping: 20 },
     },
     merged: {
       scale: [1, 1.3, 1],
@@ -312,16 +335,15 @@ export default function Game2048() {
 
   return (
     <div
-      className="flex flex-col items-center justify-center min-h-screen bg-comic-bg halftone-bg text-white select-none touch-none"
+      className="flex flex-col items-center justify-center min-h-screen bg-comic-bg halftone-bg text-white select-none"
       ref={gameContainerRef}
       tabIndex={0}
       onKeyDown={handleKeyDown}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
       aria-label="2048 Comic Edition Game Board"
     >
       {/* --- HEADER --- */}
       <div className="w-full max-w-md p-4 flex flex-col items-center">
+        {/* --- Title + Scores --- */}
         <div className="flex justify-between items-center mb-6 w-full">
           <h1 className="text-5xl sm:text-7xl font-comic text-[#ffea00] comic-text-shadow transform -rotate-1 sm:-rotate-2">
             COMIC 2048
@@ -354,6 +376,7 @@ export default function Game2048() {
 
           <div className="bg-comic-panel p-3 rounded-xl border-4 border-black shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] transform rotate-1">
             <div
+              id="game-board"
               className="relative"
               style={{
                 width: `${cellSize * GRID_SIZE + CELL_GAP * (GRID_SIZE - 1)}rem`,
@@ -422,14 +445,15 @@ export default function Game2048() {
           </div>
         </div>
 
-        {/* --- Instructions & Buttons --- */}
+        {/* --- Instructions --- */}
         <div className="mt-6 text-sm bg-[#ffea00] text-gray-900 p-4 rounded-lg border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transform -rotate-1">
           <p className="font-comic text-base">
-            <strong>HOW TO PLAY:</strong> Use your <strong>ARROW KEYS</strong> to move tiles. When
-            two tiles with the same number touch, they <strong>MERGE!</strong>
+            <strong>HOW TO PLAY:</strong> Use your <strong>ARROW KEYS</strong> or swipe inside the
+            board. When two tiles with the same number touch, they <strong>MERGE!</strong>
           </p>
         </div>
 
+        {/* --- New Game Button --- */}
         <div className="mt-6">
           <Button
             onClick={initializeGame}
