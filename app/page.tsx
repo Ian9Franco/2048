@@ -4,8 +4,6 @@ import type React from "react"
 import ComicPhrase from "@/components/ComicPhrase"
 import { comicPhrases } from "@/utils/phrases"
 import { getHeroLevel } from "@/utils/hero-levels"
-
-
 import { useEffect, useState, useRef } from "react"
 import { motion, AnimatePresence, Variants } from "framer-motion"
 import { Button } from "@/components/ui/button"
@@ -19,8 +17,7 @@ import {
 } from "@/components/ui/dialog"
 
 const GRID_SIZE = 4
-const CELL_SIZE = typeof window !== "undefined" && window.innerWidth < 640 ? 3.2 : 4.5 // smaller cells on mobile
-const CELL_GAP = 0.5 // in rem
+const CELL_GAP = 0.4 // in rem
 
 type Tile = {
   value: number
@@ -33,6 +30,7 @@ type Tile = {
 }
 
 export default function Game2048() {
+  const [cellSize, setCellSize] = useState(4.5)
   const [board, setBoard] = useState<Tile[]>([])
   const [score, setScore] = useState(0)
   const [bestScore, setBestScore] = useState(0)
@@ -42,12 +40,21 @@ export default function Game2048() {
   const gameContainerRef = useRef<HTMLDivElement>(null)
   const lastPhraseScoreRef = useRef(0)
 
+  // --- Responsive cell size ---
+  useEffect(() => {
+    const updateCellSize = () => {
+      setCellSize(window.innerWidth < 640 ? 3.8 : 4.5)
+    }
+    updateCellSize()
+    window.addEventListener("resize", updateCellSize)
+    return () => window.removeEventListener("resize", updateCellSize)
+  }, [])
+
   const playSound = (type: "move" | "merge" | "gameover") => {
     try {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
       const oscillator = audioContext.createOscillator()
       const gainNode = audioContext.createGain()
-
       oscillator.connect(gainNode)
       gainNode.connect(audioContext.destination)
 
@@ -57,7 +64,6 @@ export default function Game2048() {
           gainNode.gain.value = 0.1
           break
         case "merge":
-          // Changed to be similar to move sound - like cards sliding together
           oscillator.frequency.value = 220
           gainNode.gain.value = 0.12
           break
@@ -69,41 +75,31 @@ export default function Game2048() {
 
       oscillator.start()
       oscillator.stop(audioContext.currentTime + 0.1)
-    } catch (e) {
-      // Silently fail if audio context is not supported
-    }
+    } catch {}
   }
 
   useEffect(() => {
     initializeGame()
     const storedBestScore = localStorage.getItem("bestScore")
     if (storedBestScore) setBestScore(Number.parseInt(storedBestScore))
-
-    if (gameContainerRef.current) {
-      gameContainerRef.current.focus()
-    }
+    if (gameContainerRef.current) gameContainerRef.current.focus()
   }, [])
 
-useEffect(() => {
-  const eligiblePhrases = comicPhrases.filter(
-    (p) => score >= p.score && p.score > lastPhraseScoreRef.current
-  )
-
-  const phrase = eligiblePhrases[eligiblePhrases.length - 1]
-
-  if (phrase) {
-    setCurrentPhrase(phrase.text)
-    lastPhraseScoreRef.current = phrase.score
-    setTimeout(() => setCurrentPhrase(""), 2500)
-  }
-}, [score, bestScore])
-
+  useEffect(() => {
+    const eligiblePhrases = comicPhrases.filter(
+      (p) => score >= p.score && p.score > lastPhraseScoreRef.current
+    )
+    const phrase = eligiblePhrases[eligiblePhrases.length - 1]
+    if (phrase) {
+      setCurrentPhrase(phrase.text)
+      lastPhraseScoreRef.current = phrase.score
+      setTimeout(() => setCurrentPhrase(""), 2500)
+    }
+  }, [score, bestScore])
 
   useEffect(() => {
     const maxValue = Math.max(...board.map((tile) => tile.value), 2)
-    if (maxValue > maxTileValue) {
-      setMaxTileValue(maxValue)
-    }
+    if (maxValue > maxTileValue) setMaxTileValue(maxValue)
   }, [board, maxTileValue])
 
   const initializeGame = () => {
@@ -175,13 +171,13 @@ useEffect(() => {
           if (targetTile.value === tile.value && !targetTile.justMerged) {
             newBoard = newBoard.filter((t) => t !== targetTile && t !== tile)
             newBoard.push({
-            value: tile.value * 2,
-            id: tile.id,
-            row: newRow,
-            col: newCol,
-            justMerged: true,
-            isNew: false,
-          })
+              value: tile.value * 2,
+              id: tile.id,
+              row: newRow,
+              col: newCol,
+              justMerged: true,
+              isNew: false,
+            })
             newScore += tile.value * 2
             changed = true
             hasMerged = true
@@ -201,11 +197,8 @@ useEffect(() => {
     }
 
     if (changed) {
-      if (hasMerged) {
-        playSound("merge")
-      } else {
-        playSound("move")
-      }
+      if (hasMerged) playSound("merge")
+      else playSound("move")
 
       addNewTile(newBoard)
       setBoard(newBoard)
@@ -222,7 +215,6 @@ useEffect(() => {
 
   const isGameOverState = (board: Tile[]) => {
     if (board.length < GRID_SIZE * GRID_SIZE) return false
-
     for (const tile of board) {
       const { row, col, value } = tile
       if (
@@ -230,11 +222,9 @@ useEffect(() => {
         (row < GRID_SIZE - 1 && board.some((t) => t.row === row + 1 && t.col === col && t.value === value)) ||
         (col > 0 && board.some((t) => t.row === row && t.col === col - 1 && t.value === value)) ||
         (col < GRID_SIZE - 1 && board.some((t) => t.row === row && t.col === col + 1 && t.value === value))
-      ) {
+      )
         return false
-      }
     }
-
     return true
   }
 
@@ -254,14 +244,13 @@ useEffect(() => {
         break
     }
   }
-  // --- TOUCH CONTROLS ---
-  const touchStart = useRef<{ x: number; y: number } | null>(null)
 
+  // --- Touch controls ---
+  const touchStart = useRef<{ x: number; y: number } | null>(null)
   const handleTouchStart = (e: React.TouchEvent) => {
     const touch = e.touches[0]
     touchStart.current = { x: touch.clientX, y: touch.clientY }
   }
-
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (!touchStart.current) return
     const touch = e.changedTouches[0]
@@ -269,15 +258,9 @@ useEffect(() => {
     const dy = touch.clientY - touchStart.current.y
     const absDx = Math.abs(dx)
     const absDy = Math.abs(dy)
-
-    if (Math.max(absDx, absDy) > 30) { // minimum swipe distance
-      if (absDx > absDy) {
-        if (dx > 0) move("right")
-        else move("left")
-      } else {
-        if (dy > 0) move("down")
-        else move("up")
-      }
+    if (Math.max(absDx, absDy) > 30) {
+      if (absDx > absDy) dx > 0 ? move("right") : move("left")
+      else dy > 0 ? move("down") : move("up")
     }
     touchStart.current = null
   }
@@ -311,20 +294,19 @@ useEffect(() => {
     }
   }
 
-
-const tileVariants: Variants = {
-  initial: { scale: 0, rotate: 0 },
-  enter: {
-    scale: 1,
-    rotate: 0,
-    transition: { type: "spring" as const, stiffness: 300, damping: 20 },
-  },
-  merged: {
-    scale: [1, 1.3, 1],
-    rotate: [0, 10, -10, 0],
-    transition: { duration: 0.5, ease: "easeInOut" },
-  },
-}
+  const tileVariants: Variants = {
+    initial: { scale: 0, rotate: 0 },
+    enter: {
+      scale: 1,
+      rotate: 0,
+      transition: { type: "spring" as const, stiffness: 300, damping: 20 },
+    },
+    merged: {
+      scale: [1, 1.3, 1],
+      rotate: [0, 10, -10, 0],
+      transition: { duration: 0.5, ease: "easeInOut" },
+    },
+  }
 
   const heroLevel = getHeroLevel(maxTileValue)
 
@@ -338,56 +320,61 @@ const tileVariants: Variants = {
       onTouchEnd={handleTouchEnd}
       aria-label="2048 Comic Edition Game Board"
     >
-
+      {/* --- HEADER --- */}
       <div className="w-full max-w-md p-4 flex flex-col items-center">
         <div className="flex justify-between items-center mb-6 w-full">
-         <h1 className="text-5xl sm:text-7xl font-comic text-[#ffea00] comic-text-shadow transform -rotate-1 sm:-rotate-2">
-          COMIC 2048
-        </h1>
-
-        <div className="flex gap-3">
-          <div className="bg-[#ff1744] p-3 h-20 w-20 rounded-lg text-white flex flex-col items-center justify-center border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transform rotate-2">
-            <div className="text-xs font-comic">SCORE</div>
-            <div className="font-comic text-2xl">{score}</div>
-          </div>
-          <div className="bg-[#2979ff] h-20 w-20 rounded-lg p-3 text-white flex flex-col items-center justify-center border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transform -rotate-2">
-            <div className="text-xs font-comic">BEST</div>
-            <div className="font-comic text-2xl">{bestScore}</div>
+          <h1 className="text-5xl sm:text-7xl font-comic text-[#ffea00] comic-text-shadow transform -rotate-1 sm:-rotate-2">
+            COMIC 2048
+          </h1>
+          <div className="flex gap-3">
+            <div className="bg-[#ff1744] p-3 h-20 w-20 rounded-lg text-white flex flex-col items-center justify-center border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transform rotate-2">
+              <div className="text-xs font-comic">SCORE</div>
+              <div className="font-comic text-2xl">{score}</div>
+            </div>
+            <div className="bg-[#2979ff] h-20 w-20 rounded-lg p-3 text-white flex flex-col items-center justify-center border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transform -rotate-2">
+              <div className="text-xs font-comic">BEST</div>
+              <div className="font-comic text-2xl">{bestScore}</div>
+            </div>
           </div>
         </div>
 
-        </div>
-
+        {/* --- HERO LEVEL --- */}
         <div className="mb-4 bg-comic-panel border-4 border-black rounded-lg p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] w-full text-center">
           <div className="text-sm font-comic text-gray-400">HERO STATUS</div>
-          <div className={`text-2xl font-comic ${heroLevel.color} comic-text-shadow`}>{heroLevel.title}</div>
+          <div className={`text-2xl font-comic ${heroLevel.color} comic-text-shadow`}>
+            {heroLevel.title}
+          </div>
         </div>
 
-        <div className="relative">
-          <AnimatePresence>{currentPhrase && <ComicPhrase text={currentPhrase} />}</AnimatePresence>
+        {/* --- GAME GRID --- */}
+        <div className="relative mx-auto flex justify-center items-center">
+          <AnimatePresence>
+            {currentPhrase && <ComicPhrase text={currentPhrase} />}
+          </AnimatePresence>
 
           <div className="bg-comic-panel p-3 rounded-xl border-4 border-black shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] transform rotate-1">
             <div
               className="relative"
               style={{
-                width: `${CELL_SIZE * GRID_SIZE + CELL_GAP * (GRID_SIZE - 1)}rem`,
-                height: `${CELL_SIZE * GRID_SIZE + CELL_GAP * (GRID_SIZE - 1)}rem`,
+                width: `${cellSize * GRID_SIZE + CELL_GAP * (GRID_SIZE - 1)}rem`,
+                height: `${cellSize * GRID_SIZE + CELL_GAP * (GRID_SIZE - 1)}rem`,
               }}
             >
-              {/* Background grid */}
-              {Array.from({ length: GRID_SIZE * GRID_SIZE }).map((_, index) => (
+              {/* Background cells */}
+              {Array.from({ length: GRID_SIZE * GRID_SIZE }).map((_, i) => (
                 <div
-                  key={`cell-${index}`}
+                  key={`cell-${i}`}
                   className="absolute bg-gray-800 rounded-lg border-2 border-gray-700"
                   style={{
-                    width: `${CELL_SIZE}rem`,
-                    height: `${CELL_SIZE}rem`,
-                    left: `${(index % GRID_SIZE) * (CELL_SIZE + CELL_GAP)}rem`,
-                    top: `${Math.floor(index / GRID_SIZE) * (CELL_SIZE + CELL_GAP)}rem`,
+                    width: `${cellSize}rem`,
+                    height: `${cellSize}rem`,
+                    left: `${(i % GRID_SIZE) * (cellSize + CELL_GAP)}rem`,
+                    top: `${Math.floor(i / GRID_SIZE) * (cellSize + CELL_GAP)}rem`,
                   }}
                 />
               ))}
-              {/* Tiles */}
+
+              {/* Active tiles */}
               <AnimatePresence>
                 {board.map((tile) => (
                   <motion.div
@@ -396,22 +383,28 @@ const tileVariants: Variants = {
                       tile.isNew
                         ? {
                             scale: 0,
-                            x: tile.col * (CELL_SIZE + CELL_GAP) + "rem",
-                            y: tile.row * (CELL_SIZE + CELL_GAP) + "rem",
+                            x: tile.col * (cellSize + CELL_GAP) + "rem",
+                            y: tile.row * (cellSize + CELL_GAP) + "rem",
                           }
                         : { scale: 0 }
                     }
                     animate={{
                       scale: 1,
-                      x: tile.col * (CELL_SIZE + CELL_GAP) + "rem",
-                      y: tile.row * (CELL_SIZE + CELL_GAP) + "rem",
+                      x: tile.col * (cellSize + CELL_GAP) + "rem",
+                      y: tile.row * (cellSize + CELL_GAP) + "rem",
                     }}
                     exit={{ scale: 0 }}
-                    transition={tile.isNew ? { duration: 0.2 } : { x: { duration: 0.15 }, y: { duration: 0.15 } }}
-                    className={`absolute rounded-lg flex items-center justify-center text-3xl font-comic ${cellColor(tile.value)} border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]`}
+                    transition={
+                      tile.isNew
+                        ? { duration: 0.2 }
+                        : { x: { duration: 0.15 }, y: { duration: 0.15 } }
+                    }
+                    className={`absolute rounded-lg flex items-center justify-center text-3xl font-comic ${cellColor(
+                      tile.value
+                    )} border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]`}
                     style={{
-                      width: `${CELL_SIZE}rem`,
-                      height: `${CELL_SIZE}rem`,
+                      width: `${cellSize}rem`,
+                      height: `${cellSize}rem`,
                       transform: "perspective(1000px) rotateX(8deg) rotateY(-2deg)",
                     }}
                   >
@@ -429,23 +422,25 @@ const tileVariants: Variants = {
           </div>
         </div>
 
+        {/* --- Instructions & Buttons --- */}
         <div className="mt-6 text-sm bg-[#ffea00] text-gray-900 p-4 rounded-lg border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transform -rotate-1">
           <p className="font-comic text-base">
-            <strong>HOW TO PLAY:</strong> Use your <strong>ARROW KEYS</strong> to move the tiles. When two tiles with
-            the same number touch, they <strong>MERGE INTO ONE!</strong>
+            <strong>HOW TO PLAY:</strong> Use your <strong>ARROW KEYS</strong> to move tiles. When
+            two tiles with the same number touch, they <strong>MERGE!</strong>
           </p>
         </div>
 
         <div className="mt-6">
           <Button
             onClick={initializeGame}
-            className="bg-[#00e676] text-gray-900 hover:bg-[#00c853] border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[3px] hover:translate-y-[3px] transition-all font-comic text-lg sm:text-xl px-6 sm:px-8 py-5 sm:py-6 transform sm:rotate-1"
+            className="bg-[#00e676] text-gray-900 hover:bg-[#00c853] border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all font-comic text-lg sm:text-xl px-6 sm:px-8 py-5 sm:py-6 transform sm:rotate-1"
           >
             NEW GAME
           </Button>
         </div>
       </div>
 
+      {/* --- FOOTER --- */}
       <footer className="mt-8 mb-4 bg-comic-panel border-4 border-black rounded-lg p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
         <div className="flex flex-col items-center gap-2">
           <a
@@ -465,19 +460,24 @@ const tileVariants: Variants = {
         </div>
       </footer>
 
+      {/* --- GAME OVER MODAL --- */}
       <Dialog open={isGameOver} onOpenChange={setIsGameOver}>
         <DialogContent className="border-4 border-black shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] bg-comic-panel">
           <DialogHeader>
-            <DialogTitle className="text-4xl font-comic text-[#ff1744] comic-text-shadow">GAME OVER!</DialogTitle>
+            <DialogTitle className="text-4xl font-comic text-[#ff1744] comic-text-shadow">
+              GAME OVER!
+            </DialogTitle>
             <DialogDescription className="text-xl font-comic text-white">
               Your score: <strong className="text-[#ffea00]">{score}</strong>
-              {score === bestScore && score > 0 && <span className="text-[#00e676]"> (NEW BEST!)</span>}
+              {score === bestScore && score > 0 && (
+                <span className="text-[#00e676]"> (NEW BEST!)</span>
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
               onClick={initializeGame}
-              className="bg-[#00e676] text-gray-900 hover:bg-[#00c853] border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[3px] hover:translate-y-[3px] transition-all font-comic text-lg"
+              className="bg-[#00e676] text-gray-900 hover:bg-[#00c853] border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all font-comic text-lg"
             >
               PLAY AGAIN
             </Button>
